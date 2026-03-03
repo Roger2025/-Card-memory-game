@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>卡牌記憶遊戲 - 消失版</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e272e;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 { margin-bottom: 5px; }
+
+        .stats {
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            color: #0fb9b1;
+            font-weight: bold;
+        }
+
+        /* 遊戲面板 */
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(4, 100px);
+            gap: 15px;
+            perspective: 1000px;
+        }
+
+        /* 單張卡牌 */
+        .card {
+            width: 100px;
+            height: 145px;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.5s, opacity 0.5s, visibility 0.5s;
+            cursor: pointer;
+        }
+
+        /* 翻牌動作 */
+        .card.flipped {
+            transform: rotateY(180deg);
+        }
+
+        /* 【新功能】配對成功消失效果 */
+        .card.matched {
+            opacity: 0;
+            transform: rotateY(180deg) scale(0); /* 保持翻轉狀態同時縮小 */
+            cursor: default;
+            pointer-events: none; /* 讓玩家點不到消失後的空位 */
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        /* 正面 (花色) */
+        .card-front {
+            transform: rotateY(180deg);
+            background-color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .card-front img {
+            width: 90%;
+            height: 90%;
+            object-fit: contain;
+        }
+
+        /* 背面 (你的黑色復刻牌背) */
+        .card-back {
+            background-image: url('pokerCards/card back black.png');
+            background-size: cover;
+            background-position: center;
+            border: 2px solid #fff;
+        }
+
+        button {
+            margin-top: 30px;
+            padding: 10px 30px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            background-color: #0fb9b1;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+
+        button:hover { background-color: #0bd1c8; }
+    </style>
+</head>
+<body>
+
+    <h1>卡牌記憶遊戲</h1>
+    <div class="stats">嘗試次數: <span id="moves">0</span></div>
+    
+    <div class="game-board" id="game-board"></div>
+
+    <button id="restart-btn">重新開始遊戲</button>
+
+    <script>
+        $(document).ready(function() {
+            // 設定你的圖片檔名 (請確保資料夾內檔名正確)
+            const cardImages = [
+                'ace_of_spades.png', 'king_of_hearts.png', 
+                'queen_of_diamonds.png', 'jack_of_clubs.png', 
+                '10_of_spades.png', '9_of_hearts.png',
+                '8_of_diamonds.png', '7_of_clubs.png'
+            ];
+
+            let firstCard, secondCard;
+            let hasFlippedCard = false;
+            let lockBoard = false;
+            let moves = 0;
+            let matchedPairs = 0;
+
+            function initGame() {
+                $('#game-board').empty();
+                let cards = [...cardImages, ...cardImages]; 
+                shuffle(cards);
+                
+                moves = 0;
+                matchedPairs = 0;
+                $('#moves').text(moves);
+
+                cards.forEach(img => {
+                    const cardHTML = `
+                        <div class="card" data-card="${img}">
+                            <div class="card-face card-front">
+                                <img src="pokerCards/${img}">
+                            </div>
+                            <div class="card-face card-back"></div>
+                        </div>
+                    `;
+                    $('#game-board').append(cardHTML);
+                });
+
+                $('.card').on('click', flipCard);
+            }
+
+            function shuffle(array) {
+                array.sort(() => Math.random() - 0.5);
+            }
+
+            function flipCard() {
+                if (lockBoard) return;
+                if ($(this).hasClass('flipped')) return;
+
+                $(this).addClass('flipped');
+
+                if (!hasFlippedCard) {
+                    hasFlippedCard = true;
+                    firstCard = $(this);
+                    return;
+                }
+
+                secondCard = $(this);
+                moves++;
+                $('#moves').text(moves);
+                
+                checkForMatch();
+            }
+
+            function checkForMatch() {
+                let isMatch = firstCard.data('card') === secondCard.data('card');
+
+                if (isMatch) {
+                    disableCards();
+                } else {
+                    unflipCards();
+                }
+            }
+
+            function disableCards() {
+                // 配對成功：加上 matched class 觸發 CSS 消失動畫
+                lockBoard = true; // 消失動畫期間先鎖定面板
+                setTimeout(() => {
+                    firstCard.addClass('matched');
+                    secondCard.addClass('matched');
+                    
+                    matchedPairs++;
+                    if (matchedPairs === cardImages.length) {
+                        setTimeout(() => alert("太厲害了！你清空了所有卡牌！"), 600);
+                    }
+                    resetBoard();
+                }, 600); // 讓玩家稍微看清楚第二張牌後再消失
+            }
+
+            function unflipCards() {
+                lockBoard = true;
+                setTimeout(() => {
+                    firstCard.removeClass('flipped');
+                    secondCard.removeClass('flipped');
+                    resetBoard();
+                }, 1000);
+            }
+
+            function resetBoard() {
+                [hasFlippedCard, lockBoard] = [false, false];
+                [firstCard, secondCard] = [null, null];
+            }
+
+            $('#restart-btn').on('click', initGame);
+            initGame();
+        });
+    </script>
+</body>
+</html>
